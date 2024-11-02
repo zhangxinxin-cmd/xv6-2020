@@ -31,7 +31,7 @@ sparse_memory(char *s)
       exit(1);
     }
   }
-
+  printf("child exit\n");
   exit(0);
 }
 

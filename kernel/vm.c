@@ -5,7 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
-
+#include "spinlock.h"
+#include "proc.h"
 /*
  * the kernel's page table.
  */
@@ -182,8 +183,10 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
-    if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+    if((*pte & PTE_V) == 0){
+// panic("uvmunmap: not mapped");
+      continue;
+    }
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -439,4 +442,39 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+void backtrace() {
+  printf("backtrace\n");
+  // 获得fp
+  uint64 fp = r_fp();
+  // start, end
+  uint64 start = PGROUNDDOWN(fp);
+  uint64 end = PGROUNDUP(fp);
+  while((start <= fp) && (fp <= end)) {
+    uint64 ra = *(uint64 *)(fp - 8);
+    fp = *(uint64 *)(fp - 16);
+    printf("%p\n", ra);
+  }
+}
+
+int islazyalloc(uint64 va){
+  struct proc *p = myproc();
+  return va<p->sz?1:0;
+}
+
+int lazyalloc(uint64 va){
+  struct proc *p = myproc();
+  uint64 a=PGROUNDDOWN(va);
+  uint64 ka=0;
+  if ((ka=(uint64)kalloc())==0)
+  {
+    return -1;
+  }else {
+    memset((void*)ka,0,PGSIZE);
+    if(mappages(p->pagetable,a,PGSIZE,ka,PTE_W|PTE_X|PTE_R|PTE_U)!=0){
+      kfree((void *)ka);
+      return -1;
+    }
+  }
+  return 0;
 }
